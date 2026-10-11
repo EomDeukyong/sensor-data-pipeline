@@ -156,16 +156,11 @@ quarantine.write.mode("errorifexists").parquet(
 
 ```python
 saved = spark.read.parquet("hdfs:///user/hadoop/sensor/processed/run-001")
-saved_bad = spark.read.parquet("hdfs:///user/hadoop/sensor/quarantine/run-001")
-print("정제 저장 행 수:", saved.count())
-print("고유 event_id:", saved.select("event_id").distinct().count())
-print("격리 저장 행 수:", saved_bad.count())
-print("고온 보존:", saved.filter(
-    (F.col("temperature") == 120) & (F.col("status") == "ALARM")
-).count())
-saved_bad.groupBy("error_reason").count().show(truncate=False)
+print("저장 결과:", saved.count())
 saved.printSchema()
 ```
+
+![결과](src/images/result.JPG)
 
 ### 6. spark 기록 ui 확인
 ![excutors](src/images/spark-executors.png)
