@@ -125,8 +125,6 @@ print("오류 제외:", valid.count())
 
 ### 4. 중복 제거·Parquet 저장
 
-Spark UI에서 `parquet` 작업의 Stage 완료는 확인했다. 다만 이 목록만으로 각 출력 경로와 최종 행 수를 확정할 수 없으므로, 아래 중복 제거 수치와 저장 결과 재읽기 출력은 추가 검증 대상으로 남긴다.
-
 ```python
 clean = valid.dropDuplicates(["event_id"])
 print("최종 정제:", clean.count())
