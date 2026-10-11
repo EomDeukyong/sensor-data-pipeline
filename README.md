@@ -49,7 +49,13 @@ python3 src/generator/generate_sensor_data.py --rows 100000 --devices 100 --seed
 ### 1. 실습 세팅
 EMR 클러스터 세팅 (프라이머리 1, 코어 2, 태스크 0)
 
+![클러스터 세팅](src/images/cluster-applications.jpg)
+
+
+
 클러스터 상태가 ‘대기 중(Waiting)’이면 초기 프로비저닝과 선택한 애플리케이션 설치·구성이 완료됐단 뜻이다.
+
+![클러스터 확인](src/images/cluster-setting.png)
 
 아래는 hdfs로 생성된 데이터를 hdfs로 올리는 작업이다.
 SSM으로 연결후 **셸(`sh-5.2$`)**에서 실행했다. `/tmp/sensor_data.csv`로 데이터를 옮겨둔 상태이다. 원본은 PC에서 생성하고 S3를 거쳐 Primary로 복사했다.
@@ -61,6 +67,10 @@ sudo -u hadoop hdfs dfs -put /tmp/sensor_data.csv /user/hadoop/sensor/raw/
 sudo -u hadoop hdfs dfs -ls -h /user/hadoop/sensor/raw/
 sudo -u hdfs hdfs fsck /user/hadoop/sensor/raw/sensor_data.csv -files -blocks -locations
 ```
+
+![데이터 확인](src/images/hdfs-blocks.jpg)
+
+파일 크기가 약 6.7MB로 블록 크기보다 작아 하나의 블록으로 저장됐으며, 복제 계수가 1이므로 두 Core 노드 중 한 곳에만 저장된걸 확인할수 있다.
 
 ### 2. PySpark 입력 확인
 
@@ -83,6 +93,8 @@ df.printSchema()
 df.show(5, truncate=False)
 print("원본 행 수:", df.count())
 ```
+![spark확인](src/images/spark-input.jpg)
+
 ### 3. 오류 격리
 
 ```python
@@ -155,12 +167,24 @@ saved_bad.groupBy("error_reason").count().show(truncate=False)
 saved.printSchema()
 ```
 
-### 문제와 해결 과정
+### 6. spark 기록 ui 확인
+![excutors](src/images/spark-executors.png)
+PySpark 실습 중 생성된 Executor의 작업 수행 내역을 확인했다. 전체 Task 60개가 완료됐으며 실패한 Task는 0개였다. 캡처 시점에는 Driver만 Active 상태였고, Executor 6개는 Dead 상태로 표시됐다. 이는 현재 실행 중이 아니라는 의미이며, 작업 실패 여부와는 구분된다.
+
+![stages](src/images/spark-stages.png)
+데이터 건수 조회(count)와 Parquet 저장 과정에서 실행된 Stage를 확인했다. 총 28개 Stage가 완료됐으며, 각 단계의 Task 성공 수, 실행 시간, 데이터 입출력량을 확인할 수 있었다. 일부 단계에서는 Shuffle Read·Write가 발생해 처리 과정에서 데이터 재분배가 수행됐음을 확인했다.
+
+### 7. 문제와 해결 과정
 
 1. 클러스터 자동 종료
-실습 중 클러스터가 갑자기 종료되었다. 종료 사유를 확인하니 유휴 상태가 3,600초 지속되면 자동 종료하는 정책이 적용되어 있었다. 터미널에 접속해 있어도 EMR이 유휴 상태로 판단할 수 있다는 것을 알게 되었고, 이후 클러스터 생성 시 종료 옵션을 수동 종료로 변경했다.
+실습 중 클러스터가 갑자기 종료되었다. 종료 사유를 확인하니 유휴 상태가 3,600초 지속되면 자동 종료하는 정책이 적용되어 있었다.
+![자동 종료 문구](src/images/auto-termination.jpg)
+터미널에 접속해 있어도 EMR이 유휴 상태로 판단할 수 있다는 것을 알게 되었고, 이후 클러스터 생성 시 종료 옵션을 수동 종료로 변경했다.
+![자동 종료 해결](src/images/manual-termination-setting.jpg)
+
 2. PySpark 일시 중지로 인한 프로세스 중복 실행
-PySpark에서 Ctrl+Z를 누른 뒤 다시 실행하자 4040·4041 포트가 사용 중이라는 경고가 발생했다. jobs -l로 확인한 결과, 기존 PySpark 작업 2개가 종료되지 않고 Stopped 상태로 남아 있었다. fg %1, fg %2로 각 작업을 불러온 뒤 exit()로 종료하고 다시 실행해 원본 10만 행을 정상적으로 조회했다. Ctrl+Z는 종료가 아닌 일시 중지이며, 정상 종료할 때는 spark.stop()과 exit()를 사용해야 한다.
+PySpark에서 Ctrl+Z를 누른 뒤 다시 실행하자 4040·4041 포트가 사용 중이라는 경고가 발생했다. jobs -l로 확인한 결과, 기존 PySpark 작업 2개가 종료되지 않고 Stopped 상태로 남아 있었다. fg %1, fg %2로 각 작업을 불러온 뒤 exit()로 종료하고 다시 실행해 원본 10만 행을 정상적으로 조회했다. Ctrl+Z는 종료가 아닌 일시 중지이며, 정상 종료할 때는  exit()을 사용해야 한다.
+
 
 ## 폴더 안내
 
